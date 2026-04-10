@@ -1,9 +1,10 @@
 # ── Node.js ──────────────────────────────────────────────────
-node_modules/
+
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 package-lock.json
+node_modules/
 
 # ── C++ Compiled Binaries ─────────────────────────────────────
 # The compiled binary — always recompile from source
@@ -16,6 +17,7 @@ sudoku.exe
 *.a
 *.so
 *.dll
+*.exe
 
 # ── OS Files ──────────────────────────────────────────────────
 # macOS
