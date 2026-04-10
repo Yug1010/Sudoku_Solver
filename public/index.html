@@ -1,0 +1,791 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sudoku Solver — MRV</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link
+    href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Playfair+Display:wght@400;700&display=swap"
+    rel="stylesheet">
+  <style>
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    :root {
+      --bg: #0e0e12;
+      --surface: #17171f;
+      --surface2: #1e1e28;
+      --border: #2a2a38;
+      --border-box: #444460;
+      --accent: #7c6af7;
+      --accent2: #a594ff;
+      --text: #e8e8f0;
+      --muted: #6b6b88;
+      --given: #c8c4ff;
+      --solved: #7cffc4;
+      --mrv: #ffd97c;
+      --backtrack: #ff6b6b;
+      --error-bg: rgba(255, 107, 107, 0.08);
+      --highlight: rgba(124, 106, 247, 0.12);
+      --cell: 52px;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'DM Mono', monospace;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      padding: 2rem 1rem 3rem;
+      overflow-x: hidden;
+    }
+
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background:
+        radial-gradient(ellipse 60% 40% at 20% 10%, rgba(124, 106, 247, 0.07) 0%, transparent 70%),
+        radial-gradient(ellipse 50% 50% at 80% 90%, rgba(124, 255, 196, 0.04) 0%, transparent 70%);
+      pointer-events: none;
+    }
+
+    h1 {
+      font-family: 'Playfair Display', serif;
+      font-size: 2.2rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      margin-bottom: 0.2rem;
+      text-align: center;
+    }
+
+    .subtitle {
+      font-size: 0.72rem;
+      color: var(--muted);
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      text-align: center;
+      margin-bottom: 2rem;
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 2rem;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 1.4rem;
+      box-shadow: 0 0 60px rgba(0, 0, 0, 0.6);
+      max-width: 560px;
+      width: 100%;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(9, var(--cell));
+      grid-template-rows: repeat(9, var(--cell));
+      border: 2px solid var(--border-box);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+
+    .cell {
+      width: var(--cell);
+      height: var(--cell);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.3rem;
+      font-weight: 400;
+      cursor: pointer;
+      border: 0.5px solid var(--border);
+      background: var(--surface);
+      color: var(--text);
+      transition: background 0.1s, color 0.1s;
+      outline: none;
+      user-select: none;
+    }
+
+    .cell:focus,
+    .cell.selected {
+      background: var(--highlight);
+    }
+
+    .cell.given {
+      color: var(--given);
+      font-weight: 500;
+      cursor: default;
+    }
+
+    .cell.mrv-pick {
+      background: rgba(255, 217, 124, 0.13);
+      color: var(--mrv);
+      animation: pulse-mrv 0.3s ease;
+    }
+
+    .cell.placed {
+      color: var(--solved);
+      animation: pop 0.22s ease;
+    }
+
+    .cell.backtracking {
+      background: var(--error-bg);
+      color: var(--backtrack);
+      animation: shake 0.2s ease;
+    }
+
+    .cell.conflict {
+      background: var(--error-bg);
+      color: var(--backtrack);
+    }
+
+    .cell.highlight-row-col {
+      background: rgba(124, 106, 247, 0.05);
+    }
+
+    @keyframes pop {
+      0% {
+        transform: scale(0.65);
+        opacity: 0
+      }
+
+      65% {
+        transform: scale(1.12)
+      }
+
+      100% {
+        transform: scale(1);
+        opacity: 1
+      }
+    }
+
+    @keyframes pulse-mrv {
+
+      0%,
+      100% {
+        transform: scale(1)
+      }
+
+      50% {
+        transform: scale(1.08)
+      }
+    }
+
+    @keyframes shake {
+
+      0%,
+      100% {
+        transform: translateX(0)
+      }
+
+      25% {
+        transform: translateX(-3px)
+      }
+
+      75% {
+        transform: translateX(3px)
+      }
+    }
+
+    .cell[data-col="2"],
+    .cell[data-col="5"] {
+      border-right: 1.5px solid var(--border-box);
+    }
+
+    .cell[data-row="2"],
+    .cell[data-row="5"] {
+      border-bottom: 1.5px solid var(--border-box);
+    }
+
+    .legend {
+      display: flex;
+      gap: 14px;
+      flex-wrap: wrap;
+      justify-content: center;
+      font-size: 0.65rem;
+      letter-spacing: 0.05em;
+      color: var(--muted);
+    }
+
+    .legend span {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .dot.g {
+      background: var(--given);
+    }
+
+    .dot.m {
+      background: var(--mrv);
+    }
+
+    .dot.p {
+      background: var(--solved);
+    }
+
+    .dot.b {
+      background: var(--backtrack);
+    }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      width: 100%;
+    }
+
+    .stat {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 8px;
+      text-align: center;
+    }
+
+    .stat-val {
+      font-size: 1.3rem;
+      font-weight: 500;
+      color: var(--text);
+      display: block;
+    }
+
+    .stat-label {
+      font-size: 0.6rem;
+      color: var(--muted);
+      letter-spacing: 0.07em;
+      text-transform: uppercase;
+      margin-top: 2px;
+      display: block;
+    }
+
+    .numpad {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 8px;
+      width: 100%;
+    }
+
+    .num-btn {
+      height: 44px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--surface2);
+      color: var(--text);
+      font-family: 'DM Mono', monospace;
+      font-size: 1.1rem;
+      cursor: pointer;
+      transition: border-color 0.12s, background 0.12s;
+    }
+
+    .num-btn:hover {
+      border-color: var(--accent);
+      background: rgba(124, 106, 247, 0.12);
+    }
+
+    .num-btn:active {
+      transform: scale(0.96);
+    }
+
+    .num-btn.erase {
+      font-size: 0.7rem;
+      letter-spacing: 0.05em;
+      color: var(--muted);
+      grid-column: span 2;
+    }
+
+    .speed-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      width: 100%;
+      font-size: 0.72rem;
+      color: var(--muted);
+    }
+
+    .speed-row input[type=range] {
+      flex: 1;
+      accent-color: var(--accent);
+      cursor: pointer;
+    }
+
+    .actions {
+      display: flex;
+      gap: 10px;
+      width: 100%;
+    }
+
+    .btn {
+      flex: 1;
+      height: 46px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: var(--surface2);
+      color: var(--text);
+      font-family: 'DM Mono', monospace;
+      font-size: 0.8rem;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .btn:hover {
+      border-color: var(--muted);
+    }
+
+    .btn.primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+      font-weight: 500;
+    }
+
+    .btn.primary:hover {
+      background: var(--accent2);
+      border-color: var(--accent2);
+    }
+
+    .btn.primary:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    .btn:active:not(:disabled) {
+      transform: scale(0.98);
+    }
+
+    .status {
+      font-size: 0.75rem;
+      letter-spacing: 0.05em;
+      color: var(--muted);
+      min-height: 1.2em;
+      text-align: center;
+      transition: color 0.2s;
+    }
+
+    .status.ok {
+      color: var(--solved);
+    }
+
+    .status.err {
+      color: var(--backtrack);
+    }
+
+    .status.info {
+      color: var(--accent2);
+    }
+
+    .status.mrv {
+      color: var(--mrv);
+    }
+
+    @media (max-width: 520px) {
+      :root {
+        --cell: 36px;
+      }
+
+      h1 {
+        font-size: 1.6rem;
+      }
+
+      .cell {
+        font-size: 1rem;
+      }
+
+      .card {
+        padding: 1.2rem;
+        gap: 1rem;
+      }
+    }
+  </style>
+</head>
+
+<body>
+
+  <h1>Sudoku Solver</h1>
+  <p class="subtitle">Backtracking &nbsp;+&nbsp; MRV Heuristic</p>
+
+  <div class="card">
+    <div class="grid" id="grid" role="grid" aria-label="Sudoku grid"></div>
+
+    <div class="legend">
+      <span><span class="dot g"></span>Given clue</span>
+      <span><span class="dot m"></span>MRV pick</span>
+      <span><span class="dot p"></span>Placed</span>
+      <span><span class="dot b"></span>Backtrack</span>
+    </div>
+
+    <div class="stats">
+      <div class="stat"><span class="stat-val" id="stat-calls">0</span><span class="stat-label">Recursive calls</span>
+      </div>
+      <div class="stat"><span class="stat-val" id="stat-bt">0</span><span class="stat-label">Backtracks</span></div>
+      <div class="stat"><span class="stat-val" id="stat-mrv">0</span><span class="stat-label">MRV picks</span></div>
+    </div>
+
+    <div class="numpad" id="numpad"></div>
+
+    <div class="speed-row">
+      <span>Speed</span>
+      <input type="range" id="speed" min="0" max="4" step="1" value="2">
+      <span id="speed-label">Normal</span>
+    </div>
+
+    <div class="actions">
+      <button class="btn" id="btn-sample">Sample</button>
+      <button class="btn" id="btn-clear">Clear</button>
+      <button class="btn primary" id="btn-solve">Solve</button>
+    </div>
+
+    <div class="status" id="status">Click a cell, then type or tap a number.</div>
+  </div>
+
+  <script>
+    const SPEEDS = [4, 150, 60, 20, 999999];
+    const SPEED_LABELS = ['Animated', 'Slow', 'Normal', 'Fast', 'Instant'];
+
+    const SAMPLE = [
+      5, 3, 0, 0, 7, 0, 0, 0, 0,
+      6, 0, 0, 1, 9, 5, 0, 0, 0,
+      0, 9, 8, 0, 0, 0, 0, 6, 0,
+      8, 0, 0, 0, 6, 0, 0, 0, 3,
+      4, 0, 0, 8, 0, 3, 0, 0, 1,
+      7, 0, 0, 0, 2, 0, 0, 0, 6,
+      0, 6, 0, 0, 0, 0, 2, 8, 0,
+      0, 0, 0, 4, 1, 9, 0, 0, 5,
+      0, 0, 0, 0, 8, 0, 0, 7, 9
+    ];
+
+    let grid = Array(81).fill(0);
+    let given = Array(81).fill(false);
+    let selected = -1;
+    let solving = false;
+    let statCalls = 0, statBT = 0, statMRV = 0;
+
+    const gridEl = document.getElementById('grid');
+    const statusEl = document.getElementById('status');
+    const speedEl = document.getElementById('speed');
+    const sLabelEl = document.getElementById('speed-label');
+    const sCallsEl = document.getElementById('stat-calls');
+    const sBTEl = document.getElementById('stat-bt');
+    const sMRVEl = document.getElementById('stat-mrv');
+
+    function isSafe(g, row, col, num) {
+      for (let c = 0; c < 9; c++) if (g[row * 9 + c] === num) return false;
+      for (let r = 0; r < 9; r++) if (g[r * 9 + col] === num) return false;
+      const sr = row - (row % 3), sc = col - (col % 3);
+      for (let i = 0; i < 3; i++)
+        for (let j = 0; j < 3; j++)
+          if (g[(sr + i) * 9 + (sc + j)] === num) return false;
+      return true;
+    }
+
+    // MRV: find empty cell with fewest valid candidates.
+    // Returns null = dead end (forward check), {row:-1} = solved, {row,col,cands} = best cell.
+    function findMRVCell(g) {
+      let minCount = 10, bestRow = -1, bestCol = -1, bestCands = [];
+      for (let r = 0; r < 9; r++) {
+        for (let c = 0; c < 9; c++) {
+          if (g[r * 9 + c] !== 0) continue;
+          const cands = [];
+          for (let n = 1; n <= 9; n++) if (isSafe(g, r, c, n)) cands.push(n);
+          if (cands.length === 0) return null;     // forward check — dead end
+          if (cands.length < minCount) {
+            minCount = cands.length; bestRow = r; bestCol = c; bestCands = cands;
+            if (minCount === 1) return { row: bestRow, col: bestCol, cands: bestCands };
+          }
+        }
+      }
+      if (bestRow === -1) return { row: -1, col: -1, cands: [] }; // no empty cells
+      return { row: bestRow, col: bestCol, cands: bestCands };
+    }
+
+    function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+    // ── ANIMATED SOLVE ────────────────────────────────────────────
+    async function solveMRVAnim(g, cells, delay) {
+      if (!solving) return false;
+      statCalls++;
+      sCallsEl.textContent = statCalls;
+
+      const pick = findMRVCell(g);
+      if (!pick) return false;       // forward check caught dead end
+      if (pick.row === -1) return true; // solved
+
+      const { row, col, cands } = pick;
+      const idx = row * 9 + col;
+      statMRV++;
+      sMRVEl.textContent = statMRV;
+
+      // Flash the MRV-chosen cell in amber
+      cells[idx].className = 'cell mrv-pick';
+      cells[idx].textContent = '';
+      if (delay > 30) await sleep(delay * 0.4);
+
+      for (const num of cands) {
+        if (!solving) return false;
+        g[idx] = num;
+        cells[idx].className = 'cell placed';
+        cells[idx].textContent = num;
+        await sleep(delay);
+
+        if (await solveMRVAnim(g, cells, delay)) return true;
+
+        // Backtrack
+        g[idx] = 0;
+        statBT++;
+        sBTEl.textContent = statBT;
+        cells[idx].className = 'cell backtracking';
+        cells[idx].textContent = '';
+        if (delay > 30) await sleep(delay * 0.3);
+      }
+
+      cells[idx].className = 'cell';
+      cells[idx].textContent = '';
+      return false;
+    }
+
+    // ── INSTANT SOLVE ─────────────────────────────────────────────
+    function solveMRVInstant(g) {
+      statCalls++;
+      const pick = findMRVCell(g);
+      if (!pick) return false;
+      if (pick.row === -1) return true;
+      const { row, col, cands } = pick;
+      const idx = row * 9 + col;
+      statMRV++;
+      for (const num of cands) {
+        g[idx] = num;
+        if (solveMRVInstant(g)) return true;
+        g[idx] = 0;
+        statBT++;
+      }
+      return false;
+    }
+
+    // ── INPUT VALIDATOR ───────────────────────────────────────────
+    // Mirrors the C++ isValidInput() exactly.
+    // For each filled cell, blanks it temporarily and checks isSafe
+    // against all other filled cells. Returns {valid, row, col} so
+    // the frontend can highlight exactly which cell is the problem.
+    function validateGrid(g) {
+      for (let r = 0; r < 9; r++) {
+        for (let c = 0; c < 9; c++) {
+          const val = g[r * 9 + c];
+          if (val === 0) continue;
+
+          // Temporarily blank this cell
+          g[r * 9 + c] = 0;
+          const safe = isSafe(g, r, c, val);
+          g[r * 9 + c] = val; // restore
+
+          if (!safe) return { valid: false, row: r, col: c };
+        }
+      }
+      return { valid: true };
+    }
+
+    async function solve() {
+      if (solving) {
+        solving = false;
+        document.getElementById('btn-solve').textContent = 'Solve';
+        setStatus('Stopped.', 'err');
+        return;
+      }
+      solving = true;
+      selected = -1;
+      statCalls = statBT = statMRV = 0;
+      sCallsEl.textContent = sBTEl.textContent = sMRVEl.textContent = '0';
+      document.getElementById('btn-solve').textContent = 'Stop';
+
+      // ── VALIDATE INPUT FIRST ──────────────────────────────────
+      // Check the given clues conflict with each other before solving.
+      const check = validateGrid([...grid]);
+      if (!check.valid) {
+        solving = false;
+        document.getElementById('btn-solve').textContent = 'Solve';
+        // Highlight the conflicting cell in red
+        const cells = gridEl.querySelectorAll('.cell');
+        cells[check.row * 9 + check.col].className = 'cell backtracking';
+        setStatus(
+          `Invalid puzzle — conflict at row ${check.row + 1}, col ${check.col + 1}. Check that row duplicates, column duplicates, and box duplicates.`,
+          'err'
+        );
+        return;
+      }
+
+      setStatus('MRV scanning for best cell...', 'mrv');
+
+      const g = [...grid];
+      const cells = gridEl.querySelectorAll('.cell');
+      cells.forEach((cell, i) => {
+        cell.className = given[i] ? 'cell given' : 'cell';
+        cell.textContent = grid[i] || '';
+      });
+
+      const speedIdx = parseInt(speedEl.value);
+      const delay = SPEEDS[speedIdx];
+      const instant = delay >= 999999;
+
+      let solved;
+      if (instant) {
+        solved = solveMRVInstant(g);
+        if (solved)
+          g.forEach((v, i) => { if (!given[i]) { cells[i].textContent = v || ''; cells[i].className = v ? 'cell placed' : 'cell'; } });
+      } else {
+        solved = await solveMRVAnim(g, cells, delay);
+      }
+
+      if (!solving) return;
+      solving = false;
+      document.getElementById('btn-solve').textContent = 'Solve';
+
+      if (solved) {
+        grid = g;
+        renderGrid();
+        cells.forEach((cell, i) => { if (!given[i] && g[i]) cell.className = 'cell placed'; });
+        setStatus(`Solved! ${statCalls} calls · ${statBT} backtracks · ${statMRV} MRV picks`, 'ok');
+      } else {
+        setStatus('No solution exists for this puzzle.', 'err');
+      }
+    }
+
+    // ── GRID ──────────────────────────────────────────────────────
+    function buildGrid() {
+      gridEl.innerHTML = '';
+      for (let i = 0; i < 81; i++) {
+        const r = Math.floor(i / 9), c = i % 9;
+        const cell = document.createElement('div');
+        cell.className = 'cell';
+        cell.dataset.idx = i; cell.dataset.row = r; cell.dataset.col = c;
+        cell.tabIndex = 0;
+        cell.setAttribute('role', 'gridcell');
+        cell.addEventListener('click', () => selectCell(i));
+        cell.addEventListener('keydown', handleKey);
+        gridEl.appendChild(cell);
+      }
+      renderGrid();
+    }
+
+    function renderGrid() {
+      const conflicts = getConflicts();
+      const cells = gridEl.querySelectorAll('.cell');
+      cells.forEach((cell, i) => {
+        const r = Math.floor(i / 9), c = i % 9;
+        cell.textContent = grid[i] || '';
+        cell.className = 'cell';
+        if (given[i]) cell.classList.add('given');
+        if (conflicts.has(i)) cell.classList.add('conflict');
+        if (i === selected) cell.classList.add('selected');
+        if (selected !== -1) {
+          const sr = Math.floor(selected / 9), sc = selected % 9;
+          if ((r === sr || c === sc) && i !== selected) cell.classList.add('highlight-row-col');
+        }
+      });
+    }
+
+    function getConflicts() {
+      const conflicts = new Set();
+      const g = [...grid];
+      for (let r = 0; r < 9; r++) {
+        for (let c = 0; c < 9; c++) {
+          const val = g[r * 9 + c];
+          if (val === 0) continue;
+          g[r * 9 + c] = 0;
+          if (!isSafe(g, r, c, val)) conflicts.add(r * 9 + c);
+          g[r * 9 + c] = val;
+        }
+      }
+      return conflicts;
+    }
+
+    function selectCell(i) { if (solving) return; selected = i; renderGrid(); }
+
+    function handleKey(e) {
+      const i = parseInt(e.currentTarget.dataset.idx);
+      if (e.key >= '1' && e.key <= '9') enterNum(i, parseInt(e.key));
+      else if (['0', 'Backspace', 'Delete'].includes(e.key)) enterNum(i, 0);
+      else if (e.key === 'ArrowRight' && i % 9 < 8) focusCell(i + 1);
+      else if (e.key === 'ArrowLeft' && i % 9 > 0) focusCell(i - 1);
+      else if (e.key === 'ArrowDown' && i < 72) focusCell(i + 9);
+      else if (e.key === 'ArrowUp' && i >= 9) focusCell(i - 9);
+    }
+
+    function focusCell(i) { selected = i; renderGrid(); gridEl.querySelectorAll('.cell')[i].focus(); }
+    function enterNum(idx, num) {
+      if (solving || given[idx]) return;
+      grid[idx] = num;
+      renderGrid();
+      // Show warning immediately if this creates a conflict
+      const conflicts = getConflicts();
+      if (conflicts.size > 0)
+        setStatus(`Conflict detected — ${conflicts.size} cell(s) highlighted in red.`, 'err');
+      else
+        setStatus('Click a cell, then type or tap a number.');
+    }
+
+    function buildNumpad() {
+      const pad = document.getElementById('numpad');
+      for (let n = 1; n <= 9; n++) {
+        const btn = document.createElement('button');
+        btn.className = 'num-btn'; btn.textContent = n;
+        btn.addEventListener('click', () => { if (selected !== -1) enterNum(selected, n); });
+        pad.appendChild(btn);
+      }
+      const erase = document.createElement('button');
+      erase.className = 'num-btn erase'; erase.textContent = 'Erase';
+      erase.addEventListener('click', () => { if (selected !== -1) enterNum(selected, 0); });
+      pad.appendChild(erase);
+    }
+
+    function setStatus(msg, type = '') { statusEl.textContent = msg; statusEl.className = 'status ' + type; }
+
+    function loadSample() {
+      if (solving) return;
+      grid = [...SAMPLE]; given = SAMPLE.map(v => v !== 0); selected = -1;
+      buildGrid(); setStatus('Sample loaded — hit Solve.');
+    }
+
+    function clearGrid() {
+      if (solving) return;
+      grid = Array(81).fill(0); given = Array(81).fill(false); selected = -1;
+      buildGrid(); setStatus('Grid cleared.');
+    }
+
+    speedEl.addEventListener('input', () => { sLabelEl.textContent = SPEED_LABELS[parseInt(speedEl.value)]; });
+    document.addEventListener('keydown', e => {
+      if (selected === -1 || solving) return;
+      if (e.key >= '1' && e.key <= '9') enterNum(selected, parseInt(e.key));
+      else if (['0', 'Backspace', 'Delete'].includes(e.key)) enterNum(selected, 0);
+    });
+
+    document.getElementById('btn-solve').addEventListener('click', solve);
+    document.getElementById('btn-clear').addEventListener('click', clearGrid);
+    document.getElementById('btn-sample').addEventListener('click', loadSample);
+
+    buildGrid();
+    loadSample();
+  </script>
+</body>
+
+</html>
